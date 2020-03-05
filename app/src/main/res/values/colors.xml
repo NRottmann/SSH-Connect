@@ -3,4 +3,13 @@
     <color name="colorPrimary">#008577</color>
     <color name="colorPrimaryDark">#00574B</color>
     <color name="colorAccent">#D81B60</color>
+
+    <!-- Define grey colors -->
+    <color name="grey000">#000000</color>
+    <color name="grey001">#212121</color>
+    <color name="grey002">#303030</color>
+    <color name="grey003">#424242</color>
+
+    <color name="white">#FFFFFF</color>
+    <color name="parent">#303030</color>
 </resources>

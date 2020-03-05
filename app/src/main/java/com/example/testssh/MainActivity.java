@@ -4,10 +4,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.Handler;
-import android.util.Log;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -25,13 +22,13 @@ import java.io.PrintStream;
 
 public class MainActivity extends AppCompatActivity {
 
-    public static final String TAG = MainActivity.class.getSimpleName();
-
+    // Define the output views
     TextView outputView;
     RecyclerView recyclerView;
     MyAdapter mAdapter;
     RecyclerView.LayoutManager layoutManager;
 
+    // Define required variables for the SSH shell
     JSch jsch;
     Session session;
     ChannelShell channelssh;
@@ -48,32 +45,34 @@ public class MainActivity extends AppCompatActivity {
         outputView = findViewById(R.id.outputView);
         recyclerView = findViewById(R.id.outputRV);
 
+        // Set recycler view to a maximum size
         recyclerView.setHasFixedSize(true);
 
         // use a linear layout manager
         layoutManager = new LinearLayoutManager(this);
         recyclerView.setLayoutManager(layoutManager);
 
-        // specify an adapter (see also next example)
+        // specify an adapter
         mAdapter = new MyAdapter();
         recyclerView.setAdapter(mAdapter);
     }
 
-    // Use async method for starting the session
+    // Start session in a new thread
     public void startSessionTask(View view){
-        Log.i(TAG, "Start session task");
-
+        // Get the login data for the SSH connection
         EditText usernameText = findViewById(R.id.username);
         EditText passwordText = findViewById(R.id.password);
         EditText ipText = findViewById(R.id.ipAddress);
+        EditText portText = findViewById(R.id.port);
         final String user = usernameText.getText().toString();
         final String password = passwordText.getText().toString();
         final String ip = ipText.getText().toString();
-
+        final String port = portText.getText().toString();
+        // Start the new thread
         new Thread(new Runnable() {
             public void run() {
                 try {
-                    startSession(user, password, ip);
+                    startSession(user, password, ip, port);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -81,13 +80,12 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    // Use async method for sending commands
+    // Send message in a new thread
     public void sendMessageTask(View view){
-        Log.i(TAG, "Start message task");
-
+        // Get message to send
         EditText commandText = findViewById(R.id.messageSSH);
         final String command = commandText.getText().toString();
-
+        // Start the new thread
         new Thread(new Runnable() {
             public void run() {
                 try {
@@ -100,86 +98,68 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Start SSH connection
-    public void startSession(String user, String password, String ip) throws Exception {
+    public void startSession(String user, String password, String ip, String port) throws Exception {
+            // Transform String port to integer
+            int portNum = 22;
+            try {
+                portNum = Integer.parseInt(port);
+            } catch (NumberFormatException nfe) {
+                System.out.println("Could not parse " + nfe);
+            }
 
-        Log.i(TAG, "Start session");
+            // Create new session
+            jsch = new JSch();
+            session = jsch.getSession(user, ip, portNum);
+            session.setPassword(password);
 
-        // Create new session
-        jsch = new JSch();
-        session = jsch.getSession(user, ip, 22);
-        session.setPassword(password);
+            // Avoid asking for key confirmation
+            java.util.Properties prop = new java.util.Properties();
+            prop.put("StrictHostKeyChecking", "no");
+            session.setConfig(prop);
 
-        // Avoid asking for key confirmation
-        java.util.Properties prop = new java.util.Properties();
-        prop.put("StrictHostKeyChecking", "no");
-        session.setConfig(prop);
+            // Start connection
+            session.connect(30000);
 
-        // Start connection
-        session.connect(30000);
+            // SSH Channel
+            channelssh = (ChannelShell)
+                    session.openChannel("shell");
+            input_for_the_channel = channelssh.getOutputStream();
+            output_from_the_channel = channelssh.getInputStream();
 
-        // SSH Channel
-        channelssh = (ChannelShell)
-                session.openChannel("shell");
-        input_for_the_channel = channelssh.getOutputStream();
-        output_from_the_channel = channelssh.getInputStream();
+            commander = new PrintStream(input_for_the_channel, true);
+            br = new BufferedReader(new InputStreamReader(output_from_the_channel));
 
-        commander = new PrintStream(input_for_the_channel, true);
-        br = new BufferedReader(new InputStreamReader(output_from_the_channel));
+            // Connect to channel
+            channelssh.connect();
+            Thread.sleep(100);
 
-        // Connect to channel
-        channelssh.connect();
-
-        Thread.sleep(100);
-
-        TextView outputView = findViewById(R.id.outputView);
-        String line = br.readLine();
-
-        while (line != null && channelssh.isConnected()) {
-            Log.i(TAG, "looper session");
-
-            /*line = line.replaceAll("[^\\x00-\\x7F]", "");
-            line = line.replaceAll("[\\p{Cntrl}&&[^\r\n\t]]", "");
-            line = line.replaceAll("\\p{C}", "");
-            line = line.replaceAll("\u001B\\[[;\\d]*m", "");*/
-
-            // Remove ANSI control chars (Terminal VT 100)
-            line = line.replaceAll("\u001B\\[[\\d;]*[^\\d;]","");
-
-            final String finalLine = line;
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    mAdapter.addItem(finalLine);
-                    recyclerView.scrollToPosition(mAdapter.getItemCount() - 1);
-                }
-            });
-
-            line = br.readLine();
-        }
-
-
-        Log.i(TAG, "looper ended");
+            String line = br.readLine();
+            while (line != null && channelssh.isConnected()) {
+                // Remove ANSI control chars (Terminal VT 100)
+                line = line.replaceAll("\u001B\\[[\\d;]*[^\\d;]", "");
+                final String finalLine = line;
+                // Run and print output in UI thread
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        mAdapter.addItem(finalLine);
+                        recyclerView.scrollToPosition(mAdapter.getItemCount() - 1);
+                    }
+                });
+                line = br.readLine();
+            }
     }
 
+    // Print a message via the open shell
     public void sendMessage(String command){
-
-        Log.i(TAG, "Send message " + command);
-
         // Send command
         commander.println(command);
+    }
 
-        /*
-        TextView outputView = findViewById(R.id.outputView);
-        String line = br.readLine();
-        while (line != null && channelssh.isConnected()) {
-            Log.i(TAG, "looper session");
-            outputView.setText(line + "\n");
-            line = br.readLine();
-        }
-
-         */
-
-        Log.i(TAG, "Sending finished");
+    // Close the session
+    public void closeSession() {
+            channelssh.disconnect();
+            session.disconnect();
     }
 }
 
