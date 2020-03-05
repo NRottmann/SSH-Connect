@@ -1,2 +1,2 @@
 include ':app'
-rootProject.name='testSSH'
+rootProject.name='SSH Connect'
