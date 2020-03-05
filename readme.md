@@ -27,3 +27,10 @@ Pushing the "OPEN SSH" button leads to an log in procedure and opens the shell. 
 </p>
 
 To close the connection simply hit the "CLOSE SSH" button.
+
+
+
+## Contributors
+
+Nils Rottmann (NRottmann) and Nico Studt (Torellin)
+
